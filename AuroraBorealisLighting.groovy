@@ -17,7 +17,7 @@
 definition(
     name: "Aurora Borealis Lighting",
     namespace: "custom",
-    author: "comet",
+    author: "Colin Ho",
     description: "Simulates Northern Lights by cycling colors on selected color bulbs.",
     category: "Lighting",
     iconUrl: "",
