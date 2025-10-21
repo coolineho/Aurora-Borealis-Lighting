@@ -17,117 +17,59 @@
 definition(
     name: "Aurora Borealis Lighting",
     namespace: "custom",
-    author: "Your Name",
-    description: "Cycles lights through harmonious aurora borealis-inspired colors with smooth transitions",
-    category: "Convenience",
+    author: "comet",
+    description: "Simulates Northern Lights by cycling colors on selected color bulbs.",
+    category: "Lighting",
     iconUrl: "",
-    iconX2Url: ""
-)
+    iconX2Url: "",
+    iconX3Url: "")
 
 preferences {
-    page(name: "mainPage")
-}
-
-def mainPage() {
-    dynamicPage(name: "mainPage", title: "Aurora Borealis Lighting Setup", install: true, uninstall: true) {
-        section("Select Lights") {
-            input "lights", "capability.colorControl", title: "Which color lights?", multiple: true, required: true
-        }
-        
-        section("Timing Settings") {
-            input "transitionTime", "number", title: "Transition time between colors (seconds)", defaultValue: 30, required: true
-            input "colorHoldTime", "number", title: "Time to hold each color (seconds)", defaultValue: 10, required: true
-        }
-        
-        section("Brightness") {
-            input "brightness", "number", title: "Brightness level (1-100)", defaultValue: 75, range: "1..100", required: true
-        }
-        
-        section("Control") {
-            input "enableSwitch", "capability.switch", title: "Enable/disable with this switch (optional)", required: false
-        }
+    section("Select color bulbs for aurora effect") {
+        input "colorBulbs", "capability.colorControl", title: "Color Bulbs", multiple: true, required: true
+    }
+    section("Color change speed (seconds)") {
+        input "speed", "number", title: "Transition speed", required: true, defaultValue: 3
     }
 }
 
 def installed() {
-    log.debug "Installed with settings: ${settings}"
     initialize()
 }
 
 def updated() {
-    log.debug "Updated with settings: ${settings}"
-    unsubscribe()
     unschedule()
     initialize()
 }
 
 def initialize() {
-    if (enableSwitch) {
-        subscribe(enableSwitch, "switch", switchHandler)
-        if (enableSwitch.currentValue("switch") == "on") {
-            startCycle()
-        }
-    } else {
-        startCycle()
+    runIn(2, auroraLoop)
+}
+
+def auroraLoop() {
+    if (!colorBulbs) return // nothing to do
+
+    def speedMs = (settings.speed ?: 3) * 1000
+    def bulbs = colorBulbs
+    
+    // Turn off all color bulbs NOT in the selected list
+    def allColorBulbs = location.allDevices.findAll { it.hasCapability("ColorControl") }
+    def unselectedBulbs = allColorBulbs - bulbs
+    unselectedBulbs.each { it.off() }
+    
+    // Create a harmonious base hue for this cycle (aurora colors: green-blue range)
+    def baseHue = 50 + new Random().nextInt(40) // Range 50-90 (green to cyan/blue)
+    def baseSaturation = 85 + new Random().nextInt(15) // Range 85-100
+    
+    def randomOrder = bulbs.sort{new Random().nextInt()}
+    randomOrder.eachWithIndex { bulb, idx ->
+        // Create harmonious offset for each bulb (small variation from base)
+        def hueOffset = (idx % 3 - 1) * (5 + new Random().nextInt(5)) // -10 to +10 degree variation
+        def harmonicHue = (baseHue + hueOffset) % 100
+        def harmonicSaturation = baseSaturation - new Random().nextInt(10) // Slight sat variation
+        
+        bulb.setColor([hue: harmonicHue, saturation: harmonicSaturation, level: 100])
+        pauseExecution((speedMs / bulbs.size()).toInteger())
     }
-}
-
-def switchHandler(evt) {
-    if (evt.value == "on") {
-        startCycle()
-    } else {
-        stopCycle()
-    }
-}
-
-def startCycle() {
-    log.debug "Starting Aurora Borealis cycle"
-    state.currentColorIndex = 0
-    cycleToNextColor()
-}
-
-def stopCycle() {
-    log.debug "Stopping Aurora Borealis cycle"
-    unschedule(cycleToNextColor)
-}
-
-def cycleToNextColor() {
-    // Aurora Borealis color palette - harmonious blues, greens, purples, and pinks
-    def colors = [
-        [hue: 40, saturation: 85],   // Green-blue
-        [hue: 50, saturation: 90],   // Cyan-green
-        [hue: 35, saturation: 80],   // Aqua
-        [hue: 65, saturation: 75],   // Blue-green
-        [hue: 25, saturation: 70],   // Teal
-        [hue: 75, saturation: 80],   // Sky blue
-        [hue: 85, saturation: 85],   // Purple-blue
-        [hue: 90, saturation: 70],   // Violet
-        [hue: 95, saturation: 65],   // Purple-pink
-        [hue: 30, saturation: 75]    // Green-teal
-    ]
-    
-    def colorIndex = state.currentColorIndex ?: 0
-    def nextColor = colors[colorIndex]
-    
-    log.debug "Transitioning to color ${colorIndex}: Hue=${nextColor.hue}, Sat=${nextColor.saturation}"
-    
-    lights.each { light ->
-        light.setLevel(brightness, transitionTime)
-        light.setColor([
-            hue: nextColor.hue,
-            saturation: nextColor.saturation,
-            level: brightness
-        ])
-    }
-    
-    // Move to next color in the palette
-    state.currentColorIndex = (colorIndex + 1) % colors.size()
-    
-    // Schedule next color change
-    def totalTime = transitionTime + colorHoldTime
-    runIn(totalTime, cycleToNextColor)
-}
-
-def uninstalled() {
-    unschedule()
+    runIn(settings.speed ?: 3, auroraLoop)
 }
